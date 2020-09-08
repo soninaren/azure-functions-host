@@ -9,7 +9,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
 {
     public class LinuxAppServiceFileLoggerFactory
     {
-        private static readonly ConcurrentDictionary<string, Lazy<LinuxAppServiceFileLogger>> Loggers = new ConcurrentDictionary<string, Lazy<LinuxAppServiceFileLogger>>();
+        private static readonly ConcurrentDictionary<string, LinuxAppServiceFileLogger> Loggers = new ConcurrentDictionary<string, LinuxAppServiceFileLogger>();
         private readonly string _logRootPath;
 
         public LinuxAppServiceFileLoggerFactory()
@@ -19,8 +19,7 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
 
         public virtual LinuxAppServiceFileLogger GetOrCreate(string category)
         {
-            return Loggers.GetOrAdd(category,
-                c => new Lazy<LinuxAppServiceFileLogger>(() => new LinuxAppServiceFileLogger(category, _logRootPath, new FileSystem()))).Value;
+            return Loggers.GetOrAdd(category, c => new LinuxAppServiceFileLogger(category, _logRootPath, new FileSystem()));
         }
     }
 }

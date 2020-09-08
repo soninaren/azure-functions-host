@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 
 namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
 {
-    public class LinuxAppServiceFileLogger
+    public class LinuxAppServiceFileLogger : IDisposable
     {
         private readonly string _logFileName;
         private readonly string _logFileDirectory;
@@ -22,6 +22,8 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
         private readonly IFileSystem _fileSystem;
         private readonly CancellationTokenSource _cancellationTokenSource;
         private Task _outputTask;
+        private bool _disposed;
+        private DateTime _lastPurgeTimetamp;
 
         public LinuxAppServiceFileLogger(string logFileName, string logFileDirectory, IFileSystem fileSystem, bool startOnCreate = true)
         {
@@ -48,6 +50,8 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
         // Maximum time between successive flushes (seconds)
         public int FlushFrequencySeconds { get; set; } = 30;
 
+        public int PurgeFrequencyMinutes { get; set; } = 5;
+
         public virtual void Log(string message)
         {
             try
@@ -68,33 +72,30 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
             }
         }
 
-        public void Stop(TimeSpan timeSpan)
-        {
-            _cancellationTokenSource.Cancel();
-
-            try
-            {
-                _outputTask?.Wait(timeSpan);
-            }
-            catch (Exception)
-            {
-                // ignored
-            }
-        }
-
         public virtual async Task ProcessLogQueue(object state)
         {
             while (!_cancellationTokenSource.IsCancellationRequested)
             {
                 await InternalProcessLogQueue();
-                await Task.Delay(TimeSpan.FromSeconds(FlushFrequencySeconds), _cancellationTokenSource.Token).ContinueWith(task => { });
+
+                await Task.Delay(TimeSpan.FromSeconds(FlushFrequencySeconds), _cancellationTokenSource.Token);
+
+                if ((DateTime.UtcNow - _lastPurgeTimetamp).TotalMinutes > PurgeFrequencyMinutes)
+                {
+                    PurgeOldFiles();
+                    _lastPurgeTimetamp = DateTime.UtcNow;
+                }
             }
-            // ReSharper disable once FunctionNeverReturns
         }
 
         // internal for unittests
         internal async Task InternalProcessLogQueue()
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             string currentMessage;
             while (_buffer.TryTake(out currentMessage))
             {
@@ -109,7 +110,6 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
                 }
                 catch (Exception)
                 {
-                    // Ignored
                 }
 
                 _currentBatch.Clear();
@@ -118,23 +118,28 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
 
         private async Task WriteLogs(IEnumerable<string> currentBatch)
         {
-            _fileSystem.Directory.CreateDirectory(_logFileDirectory);
-
-            var fileInfo = _fileSystem.FileInfo.FromFileName(_logFilePath);
-            if (fileInfo.Exists)
+            try
             {
-                if (fileInfo.Length / (1024 * 1024) >= MaxFileSizeMb)
-                {
-                    RollFiles();
-                }
+                await WriteLogsCore(currentBatch);
             }
-
-            await AppendLogs(_logFilePath, currentBatch);
+            catch (DirectoryNotFoundException)
+            {
+                // ensure directory and retry
+                _fileSystem.Directory.CreateDirectory(_logFileDirectory);
+                await WriteLogsCore(currentBatch);
+            }
         }
 
-        private async Task AppendLogs(string filePath, IEnumerable<string> logs)
+        private async Task WriteLogsCore(IEnumerable<string> currentBatch)
         {
-            using (var streamWriter = _fileSystem.File.AppendText(filePath))
+            RollLogFileIfNecessary();
+
+            await AppendLogs(currentBatch);
+        }
+
+        private async Task AppendLogs(IEnumerable<string> logs)
+        {
+            using (var streamWriter = _fileSystem.File.AppendText(_logFilePath))
             {
                 foreach (var log in logs)
                 {
@@ -143,31 +148,51 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
             }
         }
 
-        private void RollFiles()
+        private void RollLogFileIfNecessary()
         {
-            // Rename current file to older file.
-            // Empty current file.
-            // Delete oldest file if exceeded configured max no. of files.
-
-            _fileSystem.File.Move(_logFilePath, GetCurrentFileName(DateTime.UtcNow));
-
-            var fileInfoBases = ListFiles(_logFileDirectory, _logFileName + "*", SearchOption.TopDirectoryOnly);
-
-            if (fileInfoBases.Length >= MaxFileCount)
+            var fileInfo = _fileSystem.FileInfo.FromFileName(_logFilePath);
+            if (fileInfo.Exists && (fileInfo.Length / (1024 * 1024) >= MaxFileSizeMb))
             {
-                var oldestFile = fileInfoBases.OrderByDescending(f => f.Name).Last();
-                oldestFile.Delete();
+                // move the current file to an archive file
+                // new current file will be created next time it's written to
+                _fileSystem.File.Move(_logFilePath, GetArchiveFileName(DateTime.UtcNow));
             }
         }
 
-        private FileInfoBase[] ListFiles(string directoryPath, string pattern, SearchOption searchOption)
+        private void PurgeOldFiles()
         {
-            return _fileSystem.DirectoryInfo.FromDirectoryName(directoryPath).GetFiles(pattern, searchOption);
+            // Delete files over the max number
+            var files = _fileSystem.DirectoryInfo.FromDirectoryName(_logFileDirectory).GetFiles(_logFileName + "*", SearchOption.TopDirectoryOnly);
+            var filesToDelete = files.OrderByDescending(f => f.Name).Skip(MaxFileCount).ToArray();
+            foreach (var fileToDelete in filesToDelete)
+            {
+                fileToDelete.Delete();
+            }
         }
 
-        public string GetCurrentFileName(DateTime dateTime)
+        public string GetArchiveFileName(DateTime dateTime)
         {
             return Path.Combine(_logFileDirectory, $"{_logFileName}{dateTime:yyyyMMddHHmmss}.log");
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!_disposed)
+            {
+                if (disposing)
+                {
+                    _cancellationTokenSource.Dispose();
+                    _buffer.Dispose();
+                }
+
+                _disposed = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
         }
     }
 }
