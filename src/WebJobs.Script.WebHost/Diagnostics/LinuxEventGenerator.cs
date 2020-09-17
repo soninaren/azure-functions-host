@@ -19,22 +19,29 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
 
         internal static string NormalizeString(string value)
         {
-            // Need to remove newlines for csv output
-            value = value.Replace(Environment.NewLine, " ");
+            if (value.Length == 0)
+            {
+                return value;
+            }
 
-            // Need to replace double quotes with single quotes as
-            // our regex query looks at double quotes as delimeter for
-            // individual column
-            // TODO: Once the regex takes into account for quotes, we can
-            // safely remove this
-            value = value.Replace("\"", "'");
+            return value;
 
-            // Wrap string literals in enclosing quotes
-            // For string columns that may contain quotes and/or
-            // our delimiter ',', before writing the value we
-            // enclose in quotes. This allows us to define matching
-            // groups based on quotes for these values.
-            return $"\"{value}\"";
+            //// Need to remove newlines for csv output
+            //value = value.Replace(Environment.NewLine, " ");
+
+            //// Need to replace double quotes with single quotes as
+            //// our regex query looks at double quotes as delimeter for
+            //// individual column
+            //// TODO: Once the regex takes into account for quotes, we can
+            //// safely remove this
+            //value = value.Replace("\"", "'");
+
+            //// Wrap string literals in enclosing quotes
+            //// For string columns that may contain quotes and/or
+            //// our delimiter ',', before writing the value we
+            //// enclose in quotes. This allows us to define matching
+            //// groups based on quotes for these values.
+            //return $"\"{value}\"";
         }
 
         /// <summary>

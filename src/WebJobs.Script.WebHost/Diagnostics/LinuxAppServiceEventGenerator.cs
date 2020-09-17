@@ -32,23 +32,19 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
             var hostName = _hostNameProvider.Value;
             FunctionsSystemLogsEventSource.Instance.SetActivityId(activityId);
 
-            var logger = _loggerFactory.GetOrCreate(FunctionsLogsCategory);
-            WriteEvent(logger, $"{(int)ToEventLevel(level)},{subscriptionId},{hostName},{appName},{functionName},{eventName},{source},{NormalizeString(details)},{NormalizeString(summary)},{hostVersion},{formattedEventTimestamp},{exceptionType},{NormalizeString(exceptionMessage)},{functionInvocationId},{hostInstanceId},{activityId}");
+            WriteEvent(FunctionsLogsCategory, $"{(int)ToEventLevel(level)},{subscriptionId},{hostName},{appName},{functionName},{eventName},{source},{NormalizeString(details)},{NormalizeString(summary)},{hostVersion},{formattedEventTimestamp},{exceptionType},{NormalizeString(exceptionMessage)},{functionInvocationId},{hostInstanceId},{activityId}");
         }
 
         public override void LogFunctionMetricEvent(string subscriptionId, string appName, string functionName, string eventName, long average,
             long minimum, long maximum, long count, DateTime eventTimestamp, string data, string runtimeSiteName, string slotName)
         {
-            var hostVersion = ScriptHost.Version;
-            var logger = _loggerFactory.GetOrCreate(FunctionsMetricsCategory);
-            WriteEvent(logger, $"{subscriptionId},{appName},{functionName},{eventName},{average},{minimum},{maximum},{count},{hostVersion},{eventTimestamp.ToString(EventTimestampFormat)},{data}");
+            WriteEvent(FunctionsMetricsCategory, $"{subscriptionId},{appName},{functionName},{eventName},{average},{minimum},{maximum},{count},{ScriptHost.Version},{eventTimestamp.ToString(EventTimestampFormat)},{data}");
         }
 
         public override void LogFunctionDetailsEvent(string siteName, string functionName, string inputBindings, string outputBindings,
             string scriptType, bool isDisabled)
         {
-            var logger = _loggerFactory.GetOrCreate(FunctionsDetailsCategory);
-            WriteEvent(logger, $"{siteName},{functionName},{NormalizeString(inputBindings)},{NormalizeString(outputBindings)},{scriptType},{(isDisabled ? 1 : 0)}");
+            WriteEvent(FunctionsDetailsCategory, $"{siteName},{functionName},{NormalizeString(inputBindings)},{NormalizeString(outputBindings)},{scriptType},{(isDisabled ? 1 : 0)}");
         }
 
         public override void LogFunctionExecutionAggregateEvent(string siteName, string functionName, long executionTimeInMs,
@@ -59,14 +55,14 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Diagnostics
         public override void LogFunctionExecutionEvent(string executionId, string siteName, int concurrency, string functionName,
             string invocationId, string executionStage, long executionTimeSpan, bool success)
         {
-            var logger = _loggerFactory.GetOrCreate(FunctionsExecutionEventsCategory);
             string currentUtcTime = DateTime.UtcNow.ToString();
-            WriteEvent(logger, $"{currentUtcTime}");
+            WriteEvent(FunctionsExecutionEventsCategory, $"{currentUtcTime}");
         }
 
-        private static void WriteEvent(LinuxAppServiceFileLogger logger, string evt)
+        private void WriteEvent(string category, string evt)
         {
-            logger.Log(evt);
+            //var logger = _loggerFactory.GetOrCreate(category);
+            //logger.Log(evt);
         }
 
         public override void LogAzureMonitorDiagnosticLogEvent(LogLevel level, string resourceId, string operationName, string category, string regionName, string properties)
