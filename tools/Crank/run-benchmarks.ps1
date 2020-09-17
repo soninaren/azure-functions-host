@@ -93,7 +93,6 @@ $crankArgs =
 
 if ($Trace) {
     $crankArgs += '--application.dotnetTrace', $true
-    $crankArgs += '--application.collectCounters',  $true
 }
 
 if ($WriteResultsToDatabase) {
