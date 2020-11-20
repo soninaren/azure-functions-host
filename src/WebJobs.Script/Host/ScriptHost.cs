@@ -27,7 +27,6 @@ using Microsoft.Azure.WebJobs.Script.Diagnostics.Extensions;
 using Microsoft.Azure.WebJobs.Script.Eventing;
 using Microsoft.Azure.WebJobs.Script.Extensibility;
 using Microsoft.Azure.WebJobs.Script.ExtensionBundle;
-using Microsoft.Azure.WebJobs.Script.Extensions;
 using Microsoft.Azure.WebJobs.Script.Workers;
 using Microsoft.Azure.WebJobs.Script.Workers.Http;
 using Microsoft.Azure.WebJobs.Script.Workers.Rpc;
@@ -276,13 +275,11 @@ namespace Microsoft.Azure.WebJobs.Script
                 // Generate Functions
                 IEnumerable<FunctionMetadata> functionMetadataList = GetFunctionsMetadata();
 
-                _workerRuntime = _workerRuntime ?? Utility.GetWorkerRuntime(functionMetadataList);
-
                 if (!_environment.IsPlaceholderModeEnabled())
                 {
                     string runtimeStack = _workerRuntime;
 
-                    if (!string.IsNullOrEmpty(_environment.GetEnvironmentVariable(RpcWorkerConstants.FunctionWorkerRuntimeSettingName)))
+                    if (!string.IsNullOrEmpty(runtimeStack))
                     {
                         // Appending the runtime version is currently only enabled for linux consumption. This will be eventually enabled for
                         // Windows Consumption as well.
@@ -293,7 +290,7 @@ namespace Microsoft.Azure.WebJobs.Script
                             runtimeStack = string.Concat(runtimeStack, "-", runtimeVersion);
                         }
                     }
-
+                    _workerRuntime = _workerRuntime ?? Utility.GetWorkerRuntime(functionMetadataList);
                     _metricsLogger.LogEvent(string.Format(MetricEventNames.HostStartupRuntimeLanguage, runtimeStack));
 
                     Utility.LogAutorestGeneratedJsonIfExists(ScriptOptions.RootScriptPath, _logger);
@@ -304,7 +301,8 @@ namespace Microsoft.Azure.WebJobs.Script
 
                 // Initialize worker function invocation dispatcher only for valid functions after creating function descriptors
                 // Dispatcher not needed for non-proxy codeless function.
-                var filteredFunctionMetadata = functionMetadataList.Where(m => m.IsProxy() || !m.IsCodeless());
+                // Disptacher needed for non-dotnet codeless functions
+                var filteredFunctionMetadata = functionMetadataList.Where(m => m.IsProxy() || !Utility.IsCodelessDotNetLanguageFunction(m));
                 await _functionDispatcher.InitializeAsync(Utility.GetValidFunctions(filteredFunctionMetadata, Functions), cancellationToken);
 
                 GenerateFunctions(directTypes);

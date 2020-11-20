@@ -629,6 +629,20 @@ namespace Microsoft.Azure.WebJobs.Script
             return dotNetLanguages.Any(lang => string.Equals(lang, functionLanguage, StringComparison.OrdinalIgnoreCase));
         }
 
+        public static bool IsCodelessDotNetLanguageFunction(FunctionMetadata functionMetadata)
+        {
+            if (functionMetadata == null)
+            {
+                throw new ArgumentNullException(nameof(functionMetadata));
+            }
+
+            if (functionMetadata.IsCodeless() && !string.IsNullOrEmpty(functionMetadata.Language))
+            {
+                return IsDotNetLanguageFunction(functionMetadata.Language);
+            }
+            return false;
+        }
+
         public static bool IsSupportedRuntime(string workerRuntime, IEnumerable<RpcWorkerConfig> workerConfigs)
         {
             return workerConfigs.Any(config => string.Equals(config.Description.Language, workerRuntime, StringComparison.OrdinalIgnoreCase));
