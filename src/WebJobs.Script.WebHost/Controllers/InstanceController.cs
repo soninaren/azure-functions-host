@@ -91,5 +91,13 @@ namespace Microsoft.Azure.WebJobs.Script.WebHost.Controllers
             // Reaching here implies that http health of the container is ok.
             return Ok();
         }
+
+        [HttpGet]
+        [Route("admin/instance/crash")]
+        public string Crash()
+        {
+            Process.GetCurrentProcess().Kill();
+            return "dd";
+        }
     }
 }
